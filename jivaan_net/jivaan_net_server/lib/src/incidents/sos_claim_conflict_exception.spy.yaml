@@ -1,0 +1,9 @@
+### Exception thrown when a responder attempts to claim an already-claimed incident.
+exception: SosClaimConflictException
+fields:
+  ### Explanation of the conflict.
+  message: String
+  ### UUID of the incident.
+  incidentId: String
+  ### Identity of the existing claimant.
+  claimedBy: String?

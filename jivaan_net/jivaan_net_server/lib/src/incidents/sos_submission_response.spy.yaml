@@ -1,0 +1,9 @@
+### Response returned by the server following an SOS incident submission.
+class: SosSubmissionResponse
+fields:
+  ### The persisted SOS incident record (new or previously existing).
+  incident: SosIncident
+  ### True if newly created by this request, false if it was already received (duplicate).
+  isNew: bool
+  ### Informative status message.
+  message: String

@@ -1,0 +1,13 @@
+### A paginated response page containing incidents and pagination metadata.
+class: IncidentListPage
+fields:
+  ### List of SOS incidents on this page.
+  incidents: List<SosIncident>
+  ### Total number of incidents matching the filter query.
+  totalCount: int
+  ### Current 1-based page number.
+  page: int
+  ### Number of items requested per page.
+  pageSize: int
+  ### True if there are more incidents beyond this page.
+  hasMore: bool

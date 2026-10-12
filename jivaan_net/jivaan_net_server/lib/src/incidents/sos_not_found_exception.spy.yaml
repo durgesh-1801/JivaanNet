@@ -1,0 +1,7 @@
+### Exception thrown when a requested incident cannot be found.
+exception: SosNotFoundException
+fields:
+  ### Human-readable message.
+  message: String
+  ### The incident UUID that was not found.
+  incidentId: String

@@ -1,0 +1,7 @@
+### Exception thrown when SOS submission payload fails validation.
+exception: SosValidationException
+fields:
+  ### Human-readable explanation of why validation failed.
+  message: String
+  ### Field name that failed validation, if applicable.
+  field: String?

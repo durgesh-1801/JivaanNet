@@ -1,0 +1,17 @@
+### Payload submitted by a mobile client or mesh relay when reporting an SOS incident.
+class: SosSubmissionPayload
+fields:
+  ### Client-generated UUID identifying the original SOS incident for idempotency.
+  incidentId: String
+  ### Geographic latitude of the incident (-90 to 90).
+  latitude: double
+  ### Geographic longitude of the incident (-180 to 180).
+  longitude: double
+  ### Original creation time on the client device (preserves offline timestamp).
+  createdAt: DateTime
+  ### Optional short description or notes.
+  description: String?
+  ### Optional pseudonymous identifier of the source device.
+  sourceDeviceId: String?
+  ### Number of mesh hops/relays reported by the client (>= 0).
+  relayCount: int

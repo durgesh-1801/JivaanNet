@@ -1,0 +1,9 @@
+# Operating System Files
+.DS_Store
+Thumbs.db
+
+# IDE and Editor Files
+.idea/
+*.swp
+*.swo
+*~

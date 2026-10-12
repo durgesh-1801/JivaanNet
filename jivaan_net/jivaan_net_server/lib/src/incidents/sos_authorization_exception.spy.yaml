@@ -1,0 +1,7 @@
+### Exception thrown when an unauthorized user attempts a protected operation.
+exception: SosAuthorizationException
+fields:
+  ### Human-readable reason for authorization failure.
+  message: String
+  ### Error code or category (e.g. unauthenticated, forbidden).
+  reason: String

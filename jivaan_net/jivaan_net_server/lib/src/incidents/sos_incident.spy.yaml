@@ -1,0 +1,38 @@
+### SOS Incident reported by a device or mesh network in emergency response.
+class: SosIncident
+table: sos_incident
+fields:
+  ### Client-generated UUID identifying the original SOS incident for idempotency.
+  incidentId: String
+  ### Geographic latitude of the incident.
+  latitude: double
+  ### Geographic longitude of the incident.
+  longitude: double
+  ### Original creation time of the incident on the device (preserves offline timestamp).
+  createdAt: DateTime
+  ### Time when the server received and ingested the incident.
+  receivedAt: DateTime
+  ### Current status of the incident (e.g., pending, acknowledged, dispatched, resolved).
+  status: String
+  ### Priority classification of the incident (e.g., low, medium, high, critical).
+  severity: String
+  ### Optional short description or notes regarding the incident.
+  description: String?
+  ### Optional pseudonymous identifier of the source device that created the SOS.
+  sourceDeviceId: String?
+  ### Number of hops/relays reported by mesh sync.
+  relayCount: int
+  ### Timestamp of the latest update to this incident.
+  lastUpdatedAt: DateTime
+  ### Optional identifier of the responder who claimed the incident.
+  claimedBy: String?
+  ### Timestamp when the incident was marked resolved.
+  resolvedAt: DateTime?
+indexes:
+  sos_incident_incident_id_unique_idx:
+    fields: incidentId
+    unique: true
+  sos_incident_status_idx:
+    fields: status
+  sos_incident_created_at_idx:
+    fields: createdAt
