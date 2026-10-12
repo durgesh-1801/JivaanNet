@@ -1,25 +1,45 @@
 import 'package:flutter/material.dart';
+import 'package:jivaan_net_client/jivaan_net_client.dart';
 
 import '../../core/theme/app_colors.dart';
 import '../../data/mock/sample_data.dart';
+import '../../main.dart' show client;
+import '../../services/sos_service.dart';
 import '../../shared/widgets/section_header.dart';
 import '../requests/request_details_screen.dart';
 
 /// 3. Confirm SOS Screen: Pre-submission review screen showing incident details,
 /// offline-mesh explanation, and primary Send SOS action.
-class ConfirmSosScreen extends StatelessWidget {
+///
+/// On "Send SOS":
+///   1. Acquires real GPS coordinates via Geolocator.
+///   2. Generates a UUID and timestamp once per new submission.
+///   3. Submits the payload to the Serverpod backend via [SosService].
+///   4. Shows the actual server response message on success.
+///   5. Shows a descriptive error dialog on failure — never falsely reports success.
+class ConfirmSosScreen extends StatefulWidget {
   final EmergencyCategory category;
   final String description;
-  final String location;
-  final String coordinates;
 
   const ConfirmSosScreen({
     super.key,
     this.category = EmergencyCategory.medical,
-    this.description = 'Need immediate medical assistance. 2 people injured after building collapse.',
-    this.location = MockDataProvider.mockCurrentLocation,
-    this.coordinates = MockDataProvider.mockCoordinates,
+    this.description =
+        'Need immediate medical assistance. 2 people injured after building collapse.',
   });
+
+  @override
+  State<ConfirmSosScreen> createState() => _ConfirmSosScreenState();
+}
+
+class _ConfirmSosScreenState extends State<ConfirmSosScreen> {
+  bool _isSubmitting = false;
+
+  // UUID and timestamp are generated once per incident, preserved across retries.
+  String? _incidentId;
+  DateTime? _createdAt;
+
+  late final SosService _sosService = SosService(client);
 
   @override
   Widget build(BuildContext context) {
@@ -27,7 +47,7 @@ class ConfirmSosScreen extends StatelessWidget {
       appBar: AppBar(
         leading: IconButton(
           icon: const Icon(Icons.arrow_back_rounded),
-          onPressed: () => Navigator.of(context).maybePop(),
+          onPressed: _isSubmitting ? null : () => Navigator.of(context).maybePop(),
         ),
         title: const Text('Confirm & Send SOS'),
       ),
@@ -64,19 +84,28 @@ class ConfirmSosScreen extends StatelessWidget {
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   ElevatedButton(
-                    onPressed: () => _handleSendSos(context),
-                    child: const Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Icon(Icons.send_rounded, size: 20),
-                        SizedBox(width: 8),
-                        Text('Send SOS'),
-                      ],
-                    ),
+                    onPressed: _isSubmitting ? null : () => _handleSendSos(context),
+                    child: _isSubmitting
+                        ? const SizedBox(
+                            height: 20,
+                            width: 20,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              color: Colors.white,
+                            ),
+                          )
+                        : const Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Icon(Icons.send_rounded, size: 20),
+                              SizedBox(width: 8),
+                              Text('Send SOS'),
+                            ],
+                          ),
                   ),
                   const SizedBox(height: 8),
                   OutlinedButton(
-                    onPressed: () => Navigator.of(context).maybePop(),
+                    onPressed: _isSubmitting ? null : () => Navigator.of(context).maybePop(),
                     child: const Text('Cancel'),
                   ),
                 ],
@@ -111,7 +140,7 @@ class ConfirmSosScreen extends StatelessWidget {
                 ),
               ),
               InkWell(
-                onTap: () => Navigator.of(context).pop(),
+                onTap: _isSubmitting ? null : () => Navigator.of(context).pop(),
                 borderRadius: BorderRadius.circular(6),
                 child: const Padding(
                   padding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
@@ -131,11 +160,11 @@ class ConfirmSosScreen extends StatelessWidget {
 
           // Type
           _buildDetailRow(
-            icon: category.icon,
-            iconColor: category.accentColor,
-            iconBg: category.bgTint,
+            icon: widget.category.icon,
+            iconColor: widget.category.accentColor,
+            iconBg: widget.category.bgTint,
             title: 'Type',
-            content: category.fullTitle,
+            content: widget.category.fullTitle,
           ),
           const Divider(height: 24, color: AppColors.border),
 
@@ -145,7 +174,7 @@ class ConfirmSosScreen extends StatelessWidget {
             iconColor: AppColors.pendingOrange,
             iconBg: const Color(0x2BFF9F0A),
             title: 'Description',
-            content: description,
+            content: widget.description,
           ),
           const Divider(height: 24, color: AppColors.border),
 
@@ -155,7 +184,7 @@ class ConfirmSosScreen extends StatelessWidget {
             iconColor: AppColors.sosRed,
             iconBg: const Color(0x22E53935),
             title: 'Location',
-            content: '$coordinates\n$location',
+            content: 'GPS coordinates will be captured on submission.',
           ),
         ],
       ),
@@ -215,8 +244,8 @@ class ConfirmSosScreen extends StatelessWidget {
     final steps = [
       (
         number: '1',
-        title: 'Saved locally on your device',
-        subtitle: 'Even without Internet',
+        title: 'Sent to JivaanNet server',
+        subtitle: 'Delivered directly when connected to Internet',
       ),
       (
         number: '2',
@@ -225,8 +254,8 @@ class ConfirmSosScreen extends StatelessWidget {
       ),
       (
         number: '3',
-        title: 'Auto-syncs when network is available',
-        subtitle: 'Sent to relief coordinators and authorities',
+        title: 'Forwarded to relief coordinators',
+        subtitle: 'Authorities and NGOs are notified automatically',
       ),
     ];
 
@@ -295,42 +324,118 @@ class ConfirmSosScreen extends StatelessWidget {
     );
   }
 
-  void _handleSendSos(BuildContext context) {
+  Future<void> _handleSendSos(BuildContext context) async {
+    // Generate incident ID and timestamp once per new submission.
+    // These are preserved if the user retries without navigating away.
+    _incidentId ??= _sosService.createIncidentId();
+    _createdAt ??= DateTime.now().toUtc();
+
+    setState(() => _isSubmitting = true);
+
+    try {
+      // 1. Acquire real GPS — throws a descriptive Exception on failure.
+      final position = await _sosService.getCurrentLocation();
+
+      // 2. Submit to Serverpod backend.
+      final response = await _sosService.submitSos(
+        incidentId: _incidentId!,
+        latitude: position.latitude,
+        longitude: position.longitude,
+        createdAt: _createdAt!,
+        description: widget.description,
+        relayCount: 0,
+      );
+
+      if (!context.mounted) return;
+      setState(() => _isSubmitting = false);
+
+      // 3. Show actual server message on success.
+      _showSuccessDialog(context, response);
+    } on Exception catch (e) {
+      if (!context.mounted) return;
+      setState(() => _isSubmitting = false);
+
+      // Surface the error without falsely reporting success.
+      _showErrorDialog(context, e.toString());
+    }
+  }
+
+  void _showSuccessDialog(BuildContext context, SosSubmissionResponse response) {
     showDialog(
       context: context,
-      builder: (context) => AlertDialog(
+      barrierDismissible: false,
+      builder: (dialogContext) => AlertDialog(
+        backgroundColor: AppColors.card,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(18),
+          side: const BorderSide(color: AppColors.border),
+        ),
+        icon: Icon(
+          response.isNew
+              ? Icons.check_circle_rounded
+              : Icons.info_outline_rounded,
+          color: AppColors.successGreen,
+          size: 48,
+        ),
+        title: Text(
+          response.isNew ? 'SOS Submitted' : 'Already Received',
+          style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+        ),
+        content: Text(
+          response.message,
+          style: const TextStyle(color: AppColors.textSecondary),
+        ),
+        actions: [
+          ElevatedButton(
+            onPressed: () {
+              Navigator.of(dialogContext).pop(); // Close dialog
+              Navigator.of(context).pushReplacement(
+                MaterialPageRoute(
+                  builder: (_) => RequestDetailsScreen.fromIncident(
+                    incident: response.incident,
+                    category: widget.category,
+                  ),
+                ),
+              );
+            },
+            child: const Text('View Request Details'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showErrorDialog(BuildContext context, String message) {
+    // Strip the leading "Exception: " prefix for cleaner display.
+    final displayMessage = message.startsWith('Exception: ')
+        ? message.substring('Exception: '.length)
+        : message;
+
+    showDialog(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
         backgroundColor: AppColors.card,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(18),
           side: const BorderSide(color: AppColors.border),
         ),
         icon: const Icon(
-          Icons.check_circle_rounded,
-          color: AppColors.successGreen,
+          Icons.error_outline_rounded,
+          color: AppColors.errorRed,
           size: 48,
         ),
         title: const Text(
-          'SOS Created Locally',
+          'Submission Failed',
           style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
         ),
-        content: const Text(
-          'Simulation: The emergency request has been stored in local offline queue and is ready for mesh broadcast or server sync.',
-          style: TextStyle(color: AppColors.textSecondary),
+        content: Text(
+          displayMessage,
+          style: const TextStyle(color: AppColors.textSecondary),
         ),
         actions: [
-          ElevatedButton(
-            onPressed: () {
-              Navigator.of(context).pop(); // Close dialog
-              // Navigate to details screen
-              Navigator.of(context).pushReplacement(
-                MaterialPageRoute(
-                  builder: (_) => RequestDetailsScreen(
-                    request: MockDataProvider.requests.first,
-                  ),
-                ),
-              );
-            },
-            child: const Text('View Request Details'),
+          OutlinedButton(
+            onPressed: () => Navigator.of(dialogContext).pop(),
+            child: const Text('Try Again'),
           ),
         ],
       ),

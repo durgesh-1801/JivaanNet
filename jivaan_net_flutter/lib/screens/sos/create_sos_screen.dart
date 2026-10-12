@@ -140,8 +140,6 @@ class _CreateSosScreenState extends State<CreateSosScreen> {
                         description: _detailsController.text.trim().isEmpty
                             ? 'No description provided.'
                             : _detailsController.text.trim(),
-                        location: MockDataProvider.mockCurrentLocation,
-                        coordinates: MockDataProvider.mockCoordinates,
                       ),
                     ),
                   );
@@ -312,8 +310,8 @@ class _CreateSosScreenState extends State<CreateSosScreen> {
             onPressed: () {
               ScaffoldMessenger.of(context).showSnackBar(
                 const SnackBar(
-                  content: Text('Simulated GPS coordinates refreshed.'),
-                  duration: Duration(seconds: 1),
+                  content: Text('Real GPS will be captured when you send the SOS.'),
+                  duration: Duration(seconds: 2),
                 ),
               );
             },

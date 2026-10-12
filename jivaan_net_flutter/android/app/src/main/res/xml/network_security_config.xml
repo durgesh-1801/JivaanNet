@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Permits cleartext (plain HTTP) traffic only to the Android emulator host alias
+  10.0.2.2, which maps to the developer machine running the Serverpod server on
+  port 8080. All other destinations continue to require HTTPS.
+-->
+<network-security-config>
+    <domain-config cleartextTrafficPermitted="true">
+        <domain includeSubdomains="false">10.0.2.2</domain>
+    </domain-config>
+</network-security-config>
