@@ -1,16 +1,25 @@
-
 import 'package:flutter/material.dart';
 import 'package:jivaan_net_client/jivaan_net_client.dart';
 
 import 'core/theme/app_theme.dart';
+import 'services/connectivity_service.dart';
 import 'shared/widgets/app_scaffold_shell.dart';
 
+/// Configurable Serverpod URL.
+/// Defaults to localhost:8080 (for adb reverse on Android devices or desktop),
+/// or can be configured via `--dart-define=SERVERPOD_URL=http://<IP>:8080/`
+const String serverpodUrl = String.fromEnvironment(
+  'SERVERPOD_URL',
+  defaultValue: 'http://localhost:8080/',
+);
+
 /// Shared Serverpod client for the app.
-/// Android emulator reaches the host computer via 10.0.2.2.
-final client = Client('http://10.0.2.2:8080/');
+final client = Client(serverpodUrl);
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
+  // Asynchronously probe backend reachability on launch without blocking UI
+  ConnectivityService.instance.checkBackendReachability(client);
   runApp(const JivaanNetApp());
 }
 

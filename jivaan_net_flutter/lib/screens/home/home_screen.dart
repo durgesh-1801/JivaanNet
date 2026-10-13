@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 
 import '../../core/theme/app_colors.dart';
 import '../../data/mock/sample_data.dart';
+import '../../main.dart' show client;
+import '../../services/connectivity_service.dart';
 import '../../shared/widgets/emergency_category_tile.dart';
 import '../../shared/widgets/primary_sos_button.dart';
 import '../../shared/widgets/section_header.dart';
@@ -214,7 +216,26 @@ class HomeScreen extends StatelessWidget {
               ],
             ),
           ),
-          StatusBadge.offline(),
+          GestureDetector(
+            onTap: () {
+              ConnectivityService.instance.checkBackendReachability(client);
+            },
+            child: StreamBuilder<AppConnectivityState>(
+              stream: ConnectivityService.instance.stateStream,
+              initialData: ConnectivityService.instance.state,
+              builder: (context, snapshot) {
+                final state =
+                    snapshot.data ?? ConnectivityService.instance.state;
+                if (state.isServerReachable) {
+                  return StatusBadge.online(label: 'Connected');
+                } else if (state.hasNetworkConnection) {
+                  return StatusBadge.serverUnreachable(label: 'Server Offline');
+                } else {
+                  return StatusBadge.offline();
+                }
+              },
+            ),
+          ),
         ],
       ),
     );

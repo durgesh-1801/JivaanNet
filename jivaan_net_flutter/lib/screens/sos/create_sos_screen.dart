@@ -310,7 +310,9 @@ class _CreateSosScreenState extends State<CreateSosScreen> {
             onPressed: () {
               ScaffoldMessenger.of(context).showSnackBar(
                 const SnackBar(
-                  content: Text('Real GPS will be captured when you send the SOS.'),
+                  content: Text(
+                    'Real GPS will be captured when you send the SOS.',
+                  ),
                   duration: Duration(seconds: 2),
                 ),
               );

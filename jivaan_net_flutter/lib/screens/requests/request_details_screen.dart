@@ -17,8 +17,8 @@ class RequestDetailsScreen extends StatelessWidget {
   const RequestDetailsScreen({
     super.key,
     required SampleSosRequest this.request,
-  })  : incident = null,
-        category = null;
+  }) : incident = null,
+       category = null;
 
   /// Constructor for actual server-persisted SOS incidents.
   const RequestDetailsScreen.fromIncident({
@@ -29,8 +29,9 @@ class RequestDetailsScreen extends StatelessWidget {
 
   bool get isLiveIncident => incident != null;
 
-  EmergencyCategory get effectiveCategory =>
-      isLiveIncident ? (category ?? EmergencyCategory.medical) : request!.category;
+  EmergencyCategory get effectiveCategory => isLiveIncident
+      ? (category ?? EmergencyCategory.medical)
+      : request!.category;
 
   @override
   Widget build(BuildContext context) {
@@ -92,11 +93,7 @@ class RequestDetailsScreen extends StatelessWidget {
               color: cat.bgTint,
               shape: BoxShape.circle,
             ),
-            child: Icon(
-              cat.icon,
-              color: cat.accentColor,
-              size: 26,
-            ),
+            child: Icon(cat.icon, color: cat.accentColor, size: 26),
           ),
           const SizedBox(width: 14),
           Expanded(
@@ -168,8 +165,8 @@ class RequestDetailsScreen extends StatelessWidget {
         : request!.formattedTime;
     final description = isLiveIncident
         ? (incident!.description?.isNotEmpty == true
-            ? incident!.description!
-            : 'No description provided.')
+              ? incident!.description!
+              : 'No description provided.')
         : request!.description;
 
     return Container(
@@ -338,8 +335,9 @@ class RequestDetailsScreen extends StatelessWidget {
   }
 
   Widget _buildTimelineCard() {
-    final timelineSteps =
-        isLiveIncident ? _buildIncidentTimeline() : request!.timeline;
+    final timelineSteps = isLiveIncident
+        ? _buildIncidentTimeline()
+        : request!.timeline;
 
     return Container(
       padding: const EdgeInsets.all(16),
@@ -438,13 +436,15 @@ class RequestDetailsScreen extends StatelessWidget {
     return [
       StatusTimelineStep(
         title: 'Created on device',
-        subtitle: 'Recorded with live GPS coordinates (${_formatTimestamp(incident!.createdAt)})',
+        subtitle:
+            'Recorded with live GPS coordinates (${_formatTimestamp(incident!.createdAt)})',
         isCompleted: true,
         icon: Icons.phone_android_rounded,
       ),
       StatusTimelineStep(
         title: 'Delivered to Serverpod',
-        subtitle: 'Received directly by backend API (${_formatTimestamp(incident!.receivedAt)})',
+        subtitle:
+            'Received directly by backend API (${_formatTimestamp(incident!.receivedAt)})',
         isCompleted: true,
         icon: Icons.cloud_done_rounded,
       ),
@@ -536,10 +536,7 @@ class RequestDetailsScreen extends StatelessWidget {
           Expanded(
             child: Text(
               MockDataProvider.disclaimer,
-              style: TextStyle(
-                color: AppColors.textMuted,
-                fontSize: 11,
-              ),
+              style: TextStyle(color: AppColors.textMuted, fontSize: 11),
             ),
           ),
         ],
@@ -556,8 +553,18 @@ class RequestDetailsScreen extends StatelessWidget {
   static String _formatTimestamp(DateTime dt) {
     final local = dt.toLocal();
     const months = [
-      'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
-      'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
+      'Jan',
+      'Feb',
+      'Mar',
+      'Apr',
+      'May',
+      'Jun',
+      'Jul',
+      'Aug',
+      'Sep',
+      'Oct',
+      'Nov',
+      'Dec',
     ];
     final month = months[local.month - 1];
     final day = local.day.toString().padLeft(2, '0');

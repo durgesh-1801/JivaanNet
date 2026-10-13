@@ -10,8 +10,7 @@ class SosService {
   /// Gets the device's real GPS coordinates.
   /// Throws an exception if location cannot be obtained.
   Future<Position> getCurrentLocation() async {
-    final serviceEnabled =
-        await Geolocator.isLocationServiceEnabled();
+    final serviceEnabled = await Geolocator.isLocationServiceEnabled();
 
     if (!serviceEnabled) {
       throw Exception('Please enable GPS/location services.');

@@ -19,6 +19,19 @@ subprojects {
     project.evaluationDependsOn(":app")
 }
 
+gradle.afterProject {
+    if (project != rootProject) {
+        val androidExt = project.extensions.findByName("android")
+        if (androidExt != null) {
+            try {
+                val method = androidExt.javaClass.getMethod("compileSdkVersion", Int::class.javaPrimitiveType)
+                method.invoke(androidExt, 36)
+                println("OVERRODE compileSdkVersion to 36 on ${project.name}")
+            } catch (_: Exception) {}
+        }
+    }
+}
+
 tasks.register<Delete>("clean") {
     delete(rootProject.layout.buildDirectory)
 }
