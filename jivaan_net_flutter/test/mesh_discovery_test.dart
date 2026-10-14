@@ -6,6 +6,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:jivaan_net_flutter/models/ble_peer_device.dart';
 import 'package:jivaan_net_flutter/screens/mesh/mesh_network_screen.dart';
 import 'package:jivaan_net_flutter/services/ble_mesh_discovery_service.dart';
+import 'package:jivaan_net_flutter/services/mesh_relay_service.dart';
 
 /// Test mock adapter implementing [BleScannerAdapter] without native platform calls.
 class FakeBleScannerAdapter implements BleScannerAdapter {
@@ -158,7 +159,11 @@ void main() {
   });
 
   group('MeshNetworkScreen Widget Tests', () {
-    testWidgets('Renders truthful mesh status card and visual radar label', (
+    setUp(() {
+      MeshRelayService.instance.reset();
+    });
+
+    testWidgets('Renders mesh status card and toggles P2P relay simulation', (
       tester,
     ) async {
       final fakeAdapter = FakeBleScannerAdapter();
@@ -175,19 +180,29 @@ void main() {
       // Check title
       expect(find.text('Mesh Network'), findsOneWidget);
 
-      // Check truthful relay transport card
-      expect(find.text('P2P SOS Relay Transport'), findsOneWidget);
+      // Check initial standby status card
+      expect(find.text('P2P SOS Relay Transport (Standby)'), findsOneWidget);
       expect(
-        find.textContaining('Hardware mesh routing driver not linked yet'),
+        find.textContaining('Hardware mesh relay driver is in standby'),
         findsOneWidget,
       );
 
-      // Verify switch is disabled (not claiming active relaying)
+      // Verify switch is present and interactive
       final switchFinder = find.byType(Switch);
       expect(switchFinder, findsOneWidget);
       final switchWidget = tester.widget<Switch>(switchFinder);
       expect(switchWidget.value, isFalse);
-      expect(switchWidget.onChanged, isNull);
+      expect(switchWidget.onChanged, isNotNull);
+
+      // Toggle switch to ON
+      await tester.tap(switchFinder);
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 100));
+
+      // Verify active P2P mesh state and simulation drill card
+      expect(find.text('P2P SOS Relay Transport (Active)'), findsOneWidget);
+      expect(find.text('P2P Multi-Hop Drill Simulation'), findsOneWidget);
+      expect(find.textContaining('Jivaan-Relay-Node-01'), findsOneWidget);
 
       // Check visual radar disclaimer
       expect(
@@ -195,8 +210,8 @@ void main() {
         findsOneWidget,
       );
 
-      // Check architectural disclaimer at bottom
-      expect(find.textContaining('BLE Discovery Phase'), findsOneWidget);
+      // Check active simulation disclaimer at bottom
+      expect(find.textContaining('P2P Mesh Simulation Active'), findsOneWidget);
 
       await tester.pumpWidget(const SizedBox());
       await service.dispose();

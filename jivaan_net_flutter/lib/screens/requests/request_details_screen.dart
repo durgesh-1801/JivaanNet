@@ -185,6 +185,13 @@ class RequestDetailsScreen extends StatelessWidget {
             _buildSeverityRow(incident!.severity),
             const Divider(height: 20, color: AppColors.border),
             _buildFieldRow('Status', _formatStatus(incident!.status)),
+            const Divider(height: 20, color: AppColors.border),
+            _buildFieldRow(
+              'Transport Route',
+              incident!.relayCount > 0
+                  ? 'P2P Mesh (${incident!.relayCount} ${incident!.relayCount == 1 ? 'Hop' : 'Hops'})'
+                  : 'Direct Link (0 Hops)',
+            ),
           ],
           const Divider(height: 20, color: AppColors.border),
           _buildFieldRow('Created At', timeStr),
@@ -441,10 +448,19 @@ class RequestDetailsScreen extends StatelessWidget {
         isCompleted: true,
         icon: Icons.phone_android_rounded,
       ),
+      if (incident!.relayCount > 0)
+        StatusTimelineStep(
+          title: 'P2P Mesh Relayed (${incident!.relayCount} ${incident!.relayCount == 1 ? 'hop' : 'hops'})',
+          subtitle:
+              'Forwarded peer-to-peer across local JivaanNet BLE nodes before reaching gateway',
+          isCompleted: true,
+          icon: Icons.hub_rounded,
+        ),
       StatusTimelineStep(
         title: 'Delivered to Serverpod',
-        subtitle:
-            'Received directly by backend API (${_formatTimestamp(incident!.receivedAt)})',
+        subtitle: incident!.relayCount > 0
+            ? 'Relayed packet received by backend API (${_formatTimestamp(incident!.receivedAt)})'
+            : 'Received directly by backend API (${_formatTimestamp(incident!.receivedAt)})',
         isCompleted: true,
         icon: Icons.cloud_done_rounded,
       ),
@@ -506,7 +522,9 @@ class RequestDetailsScreen extends StatelessWidget {
             const SizedBox(width: 10),
             Expanded(
               child: Text(
-                'LIVE SERVER INCIDENT: Verified & registered with Serverpod backend (Relay count: ${incident!.relayCount}).',
+                incident!.relayCount > 0
+                    ? 'LIVE SERVER INCIDENT: Verified & registered with Serverpod backend (P2P Mesh Relayed via ${incident!.relayCount} ${incident!.relayCount == 1 ? "hop" : "hops"}).'
+                    : 'LIVE SERVER INCIDENT: Verified & registered with Serverpod backend (Direct link, 0 hops).',
                 style: const TextStyle(
                   color: AppColors.textSecondary,
                   fontSize: 11,

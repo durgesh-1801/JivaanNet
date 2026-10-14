@@ -104,6 +104,42 @@ class SosRequestCard extends StatelessWidget {
                             fontWeight: FontWeight.w600,
                           ),
                         ),
+                        if (incident.relayCount > 0) ...[
+                          const SizedBox(width: 4),
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 4,
+                              vertical: 1,
+                            ),
+                            decoration: BoxDecoration(
+                              color: AppColors.cyanAccent.withValues(alpha: 0.15),
+                              borderRadius: BorderRadius.circular(4),
+                              border: Border.all(
+                                color: AppColors.cyanAccent.withValues(alpha: 0.4),
+                                width: 0.8,
+                              ),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                const Icon(
+                                  Icons.hub_rounded,
+                                  color: AppColors.cyanAccent,
+                                  size: 9,
+                                ),
+                                const SizedBox(width: 2),
+                                Text(
+                                  '${incident.relayCount}h',
+                                  style: const TextStyle(
+                                    color: AppColors.cyanAccent,
+                                    fontSize: 9,
+                                    fontWeight: FontWeight.w700,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
                         const Text(
                           ' • ',
                           style: TextStyle(

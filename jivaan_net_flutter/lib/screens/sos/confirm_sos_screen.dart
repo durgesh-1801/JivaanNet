@@ -8,6 +8,7 @@ import '../../main.dart' show client;
 import '../../models/emergency_contact.dart';
 import '../../services/emergency_contact_service.dart';
 import '../../services/emergency_sms_preview_service.dart';
+import '../../services/mesh_relay_service.dart';
 import '../../services/sos_service.dart';
 import '../../shared/widgets/section_header.dart';
 import '../../shared/widgets/status_badge.dart';
@@ -45,6 +46,7 @@ class _ConfirmSosScreenState extends State<ConfirmSosScreen> {
   bool _isSubmitting = false;
   bool _isPreviewingSms = false;
   bool _isLoadingContact = true;
+  bool _useMeshRelay = MeshRelayService.instance.isRelayEnabled;
 
   // UUID and timestamp are generated once per incident, preserved across retries.
   String? _incidentId;
@@ -97,6 +99,10 @@ class _ConfirmSosScreenState extends State<ConfirmSosScreen> {
                   children: [
                     // Emergency Details Card with Edit action
                     _buildDetailsCard(context),
+                    const SizedBox(height: 20),
+
+                    // Transport Route Selector Card (P2P Mesh vs Direct)
+                    _buildTransportRouteCard(),
                     const SizedBox(height: 24),
 
                     // "What happens next?" Explanation
@@ -315,6 +321,120 @@ class _ConfirmSosScreenState extends State<ConfirmSosScreen> {
           ),
         ),
       ],
+    );
+  }
+
+  Widget _buildTransportRouteCard() {
+    final hops = MeshRelayService.instance.simulatedHops;
+    final isGlobalRelayEnabled = MeshRelayService.instance.isRelayEnabled;
+
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: AppColors.card,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: _useMeshRelay
+              ? AppColors.cyanAccent.withValues(alpha: 0.35)
+              : AppColors.border,
+          width: 1,
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                width: 32,
+                height: 32,
+                decoration: BoxDecoration(
+                  color: (_useMeshRelay ? AppColors.cyanAccent : AppColors.textMuted)
+                      .withValues(alpha: 0.15),
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(
+                  _useMeshRelay ? Icons.hub_rounded : Icons.cell_tower_rounded,
+                  color: _useMeshRelay ? AppColors.cyanAccent : AppColors.textMuted,
+                  size: 18,
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      _useMeshRelay
+                          ? 'P2P Mesh Relayed ($hops ${hops == 1 ? 'Hop' : 'Hops'})'
+                          : 'Direct Internet Route (0 Hops)',
+                      style: const TextStyle(
+                        color: AppColors.textPrimary,
+                        fontSize: 15,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    Text(
+                      _useMeshRelay
+                          ? 'Packet routed via nearby BLE peers before reaching backend'
+                          : 'Direct submission to Serverpod backend',
+                      style: const TextStyle(
+                        color: AppColors.textMuted,
+                        fontSize: 11,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              Switch(
+                value: _useMeshRelay,
+                activeThumbColor: AppColors.cyanAccent,
+                onChanged: _isSubmitting
+                    ? null
+                    : (val) {
+                        setState(() {
+                          _useMeshRelay = val;
+                          if (val && !isGlobalRelayEnabled) {
+                            MeshRelayService.instance.toggleRelay(true);
+                          }
+                        });
+                      },
+              ),
+            ],
+          ),
+          if (_useMeshRelay) ...[
+            const SizedBox(height: 12),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+              decoration: BoxDecoration(
+                color: AppColors.surfaceElevated,
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: AppColors.border),
+              ),
+              child: Row(
+                children: [
+                  const Icon(
+                    Icons.alt_route_rounded,
+                    color: AppColors.cyanAccent,
+                    size: 16,
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'Multi-Hop Route: Phone -> Jivaan-Relay-Node -> Gateway -> Serverpod ($hops Hops)',
+                      style: const TextStyle(
+                        color: AppColors.textSecondary,
+                        fontSize: 11,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ],
+      ),
     );
   }
 
@@ -708,6 +828,9 @@ class _ConfirmSosScreenState extends State<ConfirmSosScreen> {
       // 1. Acquire real GPS — throws a descriptive Exception on failure.
       final position = await _sosService.getCurrentLocation();
 
+      final hops =
+          _useMeshRelay ? MeshRelayService.instance.simulatedHops : 0;
+
       // 2. Submit to Serverpod backend.
       final response = await _sosService.submitSos(
         incidentId: _incidentId!,
@@ -715,8 +838,12 @@ class _ConfirmSosScreenState extends State<ConfirmSosScreen> {
         longitude: position.longitude,
         createdAt: _createdAt!,
         description: widget.description,
-        relayCount: 0,
+        relayCount: hops,
       );
+
+      if (hops > 0) {
+        MeshRelayService.instance.recordRelayEvent();
+      }
 
       if (!context.mounted) return;
       setState(() => _isSubmitting = false);

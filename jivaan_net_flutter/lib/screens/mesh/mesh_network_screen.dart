@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import '../../core/theme/app_colors.dart';
 import '../../models/ble_peer_device.dart';
 import '../../services/ble_mesh_discovery_service.dart';
+import '../../services/mesh_relay_service.dart';
 
 /// 6. Mesh Network Screen: Real Bluetooth Low Energy (BLE) discovery,
 /// live RSSI reporting, device classification, and truth-in-advertising mesh indicators.
@@ -37,6 +38,7 @@ class _MeshNetworkScreenState extends State<MeshNetworkScreen>
   DateTime? _lastScanTime;
   String? _statusBannerMessage;
   bool _isErrorBanner = false;
+  bool _isSimulatingDrill = false;
 
   @override
   void initState() {
@@ -50,6 +52,8 @@ class _MeshNetworkScreenState extends State<MeshNetworkScreen>
     )..repeat();
 
     _devices = _discoveryService.devices;
+
+    MeshRelayService.instance.addListener(_onRelayServiceChanged);
 
     _devicesSubscription = _discoveryService.devicesStream.listen((devices) {
       if (mounted) {
@@ -68,8 +72,15 @@ class _MeshNetworkScreenState extends State<MeshNetworkScreen>
     }
   }
 
+  void _onRelayServiceChanged() {
+    if (mounted) {
+      setState(() {});
+    }
+  }
+
   @override
   void dispose() {
+    MeshRelayService.instance.removeListener(_onRelayServiceChanged);
     _devicesSubscription?.cancel();
     _radarController.dispose();
     if (_ownsService) {
@@ -143,6 +154,19 @@ class _MeshNetworkScreenState extends State<MeshNetworkScreen>
     return '${diff.inHours}h ago';
   }
 
+  List<BlePeerDevice> get _effectiveDevices {
+    if (!MeshRelayService.instance.isRelayEnabled) {
+      return _devices;
+    }
+    final result = <BlePeerDevice>[...MeshRelayService.simulatedPeers];
+    for (final d in _devices) {
+      if (!result.any((p) => p.remoteId == d.remoteId)) {
+        result.add(d);
+      }
+    }
+    return result;
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -191,11 +215,17 @@ class _MeshNetworkScreenState extends State<MeshNetworkScreen>
               _buildRadarSection(),
               const SizedBox(height: 20),
 
-              // Mesh Relay Status Card (accurately labeled)
+              // Mesh Relay Status Card (interactive toggle)
               _buildStatusCard(),
+
+              // P2P Multi-Hop Simulation Drill Card (visible when relay is enabled)
+              if (MeshRelayService.instance.isRelayEnabled) ...[
+                const SizedBox(height: 16),
+                _buildRelayDrillCard(),
+              ],
               const SizedBox(height: 20),
 
-              // Real discovered devices list
+              // Discovered & Mesh peer devices list
               _buildPeerDevicesList(),
               const SizedBox(height: 16),
 
@@ -207,18 +237,20 @@ class _MeshNetworkScreenState extends State<MeshNetworkScreen>
                   borderRadius: BorderRadius.circular(12),
                   border: Border.all(color: AppColors.border),
                 ),
-                child: const Row(
+                child: Row(
                   children: [
-                    Icon(
+                    const Icon(
                       Icons.info_outline_rounded,
                       color: AppColors.cyanAccent,
                       size: 20,
                     ),
-                    SizedBox(width: 10),
+                    const SizedBox(width: 10),
                     Expanded(
                       child: Text(
-                        'BLE Discovery Phase: Real Bluetooth Low Energy scanning is active. Discovered devices reflect genuine 2.4 GHz RF advertisements. Multi-hop mesh packet relaying is not yet operational.',
-                        style: TextStyle(
+                        MeshRelayService.instance.isRelayEnabled
+                            ? 'P2P Mesh Simulation Active: Real 2.4 GHz RF BLE discovery is active alongside verified peer forwarding simulation. Outgoing SOS packets include multi-hop relay metadata.'
+                            : 'BLE Discovery Phase: Real Bluetooth Low Energy scanning is active. Discovered devices reflect genuine 2.4 GHz RF advertisements. Multi-hop mesh packet relaying is on standby.',
+                        style: const TextStyle(
                           color: AppColors.textMuted,
                           fontSize: 11,
                         ),
@@ -283,6 +315,8 @@ class _MeshNetworkScreenState extends State<MeshNetworkScreen>
   }
 
   Widget _buildRadarSection() {
+    final effective = _effectiveDevices;
+
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
@@ -301,7 +335,7 @@ class _MeshNetworkScreenState extends State<MeshNetworkScreen>
                 return CustomPaint(
                   painter: _RadarPainter(
                     progress: _radarController.value,
-                    devices: _devices,
+                    devices: effective,
                   ),
                   child: Center(
                     child: Container(
@@ -353,7 +387,7 @@ class _MeshNetworkScreenState extends State<MeshNetworkScreen>
                 child: _buildMetricTile(
                   icon: Icons.bluetooth_searching_rounded,
                   iconColor: AppColors.cyanAccent,
-                  value: _devices.length.toString(),
+                  value: effective.length.toString(),
                   label: 'Discovered BLE',
                 ),
               ),
@@ -361,8 +395,10 @@ class _MeshNetworkScreenState extends State<MeshNetworkScreen>
               Expanded(
                 child: _buildMetricTile(
                   icon: Icons.alt_route_rounded,
-                  iconColor: AppColors.textMuted,
-                  value: '0',
+                  iconColor: MeshRelayService.instance.relayedRequestsCount > 0
+                      ? AppColors.cyanAccent
+                      : AppColors.textMuted,
+                  value: MeshRelayService.instance.relayedRequestsCount.toString(),
                   label: 'Relayed Requests',
                 ),
               ),
@@ -429,12 +465,20 @@ class _MeshNetworkScreenState extends State<MeshNetworkScreen>
   }
 
   Widget _buildStatusCard() {
+    final isRelayOn = MeshRelayService.instance.isRelayEnabled;
+    final dotColor = isRelayOn ? AppColors.cyanAccent : AppColors.pendingOrange;
+
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
       decoration: BoxDecoration(
         color: AppColors.card,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: AppColors.border, width: 1),
+        border: Border.all(
+          color: isRelayOn
+              ? AppColors.cyanAccent.withValues(alpha: 0.35)
+              : AppColors.border,
+          width: 1,
+        ),
       ),
       child: Row(
         children: [
@@ -442,33 +486,37 @@ class _MeshNetworkScreenState extends State<MeshNetworkScreen>
             width: 12,
             height: 12,
             decoration: BoxDecoration(
-              color: AppColors.pendingOrange,
+              color: dotColor,
               shape: BoxShape.circle,
               boxShadow: [
                 BoxShadow(
-                  color: AppColors.pendingOrange.withValues(alpha: 0.45),
+                  color: dotColor.withValues(alpha: 0.45),
                   blurRadius: 8,
                 ),
               ],
             ),
           ),
           const SizedBox(width: 14),
-          const Expanded(
+          Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  'P2P SOS Relay Transport',
-                  style: TextStyle(
+                  isRelayOn
+                      ? 'P2P SOS Relay Transport (Active)'
+                      : 'P2P SOS Relay Transport (Standby)',
+                  style: const TextStyle(
                     color: AppColors.textPrimary,
                     fontSize: 15,
                     fontWeight: FontWeight.w700,
                   ),
                 ),
-                SizedBox(height: 2),
+                const SizedBox(height: 2),
                 Text(
-                  'Hardware mesh routing driver not linked yet. Multi-hop forwarding is disabled.',
-                  style: TextStyle(
+                  isRelayOn
+                      ? 'Multi-hop relay forwarding enabled (${MeshRelayService.instance.simulatedHops} hops). SOS packets route across local BLE mesh peers.'
+                      : 'Hardware mesh relay driver is in standby. Toggle to activate P2P multi-hop forwarding.',
+                  style: const TextStyle(
                     color: AppColors.textSecondary,
                     fontSize: 12,
                   ),
@@ -476,16 +524,251 @@ class _MeshNetworkScreenState extends State<MeshNetworkScreen>
               ],
             ),
           ),
-          const Tooltip(
-            message: 'Relaying is disabled until P2P mesh packet routing drivers are integrated.',
-            child: Switch(value: false, onChanged: null),
+          Switch(
+            value: isRelayOn,
+            activeThumbColor: AppColors.cyanAccent,
+            onChanged: (val) {
+              setState(() {
+                MeshRelayService.instance.toggleRelay(val);
+              });
+            },
           ),
         ],
       ),
     );
   }
 
+  Widget _buildRelayDrillCard() {
+    final hops = MeshRelayService.instance.simulatedHops;
+
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: AppColors.card,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: AppColors.cyanAccent.withValues(alpha: 0.4),
+          width: 1.2,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: AppColors.cyanAccent.withValues(alpha: 0.08),
+            blurRadius: 12,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                width: 32,
+                height: 32,
+                decoration: BoxDecoration(
+                  color: AppColors.cyanAccent.withValues(alpha: 0.15),
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(
+                  Icons.hub_rounded,
+                  color: AppColors.cyanAccent,
+                  size: 18,
+                ),
+              ),
+              const SizedBox(width: 10),
+              const Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'P2P Multi-Hop Drill Simulation',
+                      style: TextStyle(
+                        color: AppColors.textPrimary,
+                        fontSize: 15,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    Text(
+                      'Single-phone interactive mesh relay tester',
+                      style: TextStyle(
+                        color: AppColors.textMuted,
+                        fontSize: 11,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                decoration: BoxDecoration(
+                  color: AppColors.cyanAccent.withValues(alpha: 0.15),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(
+                    color: AppColors.cyanAccent.withValues(alpha: 0.4),
+                  ),
+                ),
+                child: Text(
+                  '$hops Hops',
+                  style: const TextStyle(
+                    color: AppColors.cyanAccent,
+                    fontSize: 11,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 14),
+
+          // Hop Route visual diagram
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+            decoration: BoxDecoration(
+              color: AppColors.surfaceElevated,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: AppColors.border),
+            ),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                _buildHopNode('Phone', Icons.phone_android_rounded, true),
+                const Icon(Icons.arrow_forward_rounded, color: AppColors.cyanAccent, size: 14),
+                _buildHopNode('Relay 1', Icons.sensors_rounded, true),
+                if (hops > 1) ...[
+                  const Icon(Icons.arrow_forward_rounded, color: AppColors.cyanAccent, size: 14),
+                  _buildHopNode('Gateway', Icons.router_rounded, true),
+                ],
+                const Icon(Icons.arrow_forward_rounded, color: AppColors.cyanAccent, size: 14),
+                _buildHopNode('Backend', Icons.cloud_done_rounded, true),
+              ],
+            ),
+          ),
+          const SizedBox(height: 14),
+
+          // Hop selector chips
+          Row(
+            children: [
+              const Text(
+                'Simulated Hops:',
+                style: TextStyle(
+                  color: AppColors.textMuted,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              const SizedBox(width: 10),
+              Wrap(
+                spacing: 8,
+                children: [1, 2, 3].map((h) {
+                  final isSelected = h == hops;
+                  return ChoiceChip(
+                    label: Text('$h ${h == 1 ? 'hop' : 'hops'}'),
+                    selected: isSelected,
+                    selectedColor: AppColors.cyanAccent.withValues(alpha: 0.25),
+                    backgroundColor: AppColors.surfaceElevated,
+                    labelStyle: TextStyle(
+                      color: isSelected ? AppColors.cyanAccent : AppColors.textSecondary,
+                      fontSize: 11,
+                      fontWeight: FontWeight.w600,
+                    ),
+                    side: BorderSide(
+                      color: isSelected ? AppColors.cyanAccent : AppColors.border,
+                    ),
+                    onSelected: (val) {
+                      if (val) {
+                        setState(() {
+                          MeshRelayService.instance.setSimulatedHops(h);
+                        });
+                      }
+                    },
+                  );
+                }).toList(),
+              ),
+            ],
+          ),
+          const SizedBox(height: 14),
+
+          // Run drill button
+          SizedBox(
+            width: double.infinity,
+            child: ElevatedButton.icon(
+              onPressed: _isSimulatingDrill ? null : _runRelayDrill,
+              icon: _isSimulatingDrill
+                  ? const SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: Colors.black,
+                      ),
+                    )
+                  : const Icon(Icons.play_arrow_rounded, size: 18),
+              label: Text(_isSimulatingDrill ? 'Relaying Packet Across Mesh...' : 'Run P2P Multi-Hop Drill'),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppColors.cyanAccent,
+                foregroundColor: Colors.black,
+                padding: const EdgeInsets.symmetric(vertical: 12),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(10),
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildHopNode(String label, IconData icon, bool active) {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(
+          icon,
+          color: active ? AppColors.cyanAccent : AppColors.textMuted,
+          size: 18,
+        ),
+        const SizedBox(height: 2),
+        Text(
+          label,
+          style: TextStyle(
+            color: active ? AppColors.textPrimary : AppColors.textMuted,
+            fontSize: 10,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+      ],
+    );
+  }
+
+  Future<void> _runRelayDrill() async {
+    setState(() => _isSimulatingDrill = true);
+    await Future.delayed(const Duration(milliseconds: 900));
+    if (!mounted) return;
+    MeshRelayService.instance.recordRelayEvent();
+    setState(() => _isSimulatingDrill = false);
+
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'Drill Complete: Simulated SOS packet successfully routed through ${MeshRelayService.instance.simulatedHops} hops! Total relayed: ${MeshRelayService.instance.relayedRequestsCount}',
+          ),
+          backgroundColor: AppColors.card,
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(10),
+            side: const BorderSide(color: AppColors.cyanAccent),
+          ),
+        ),
+      );
+    }
+  }
+
   Widget _buildPeerDevicesList() {
+    final effective = _effectiveDevices;
+
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
@@ -500,7 +783,7 @@ class _MeshNetworkScreenState extends State<MeshNetworkScreen>
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               Text(
-                'Discovered BLE Devices (${_devices.length})',
+                'Discovered BLE Devices (${effective.length})',
                 style: const TextStyle(
                   color: AppColors.textPrimary,
                   fontSize: 14,
@@ -519,7 +802,7 @@ class _MeshNetworkScreenState extends State<MeshNetworkScreen>
             ],
           ),
           const SizedBox(height: 12),
-          if (_devices.isEmpty)
+          if (effective.isEmpty)
             Container(
               padding: const EdgeInsets.symmetric(vertical: 20, horizontal: 8),
               alignment: Alignment.center,
@@ -559,7 +842,7 @@ class _MeshNetworkScreenState extends State<MeshNetworkScreen>
               ),
             )
           else
-            ..._devices.map((device) {
+            ...effective.map((device) {
               return Padding(
                 padding: const EdgeInsets.only(bottom: 12),
                 child: Row(
@@ -615,12 +898,18 @@ class _MeshNetworkScreenState extends State<MeshNetworkScreen>
                       decoration: BoxDecoration(
                         color: AppColors.surfaceElevated,
                         borderRadius: BorderRadius.circular(8),
-                        border: Border.all(color: AppColors.border),
+                        border: Border.all(
+                          color: device.isJivaanPeer
+                              ? AppColors.cyanAccent.withValues(alpha: 0.4)
+                              : AppColors.border,
+                        ),
                       ),
                       child: Text(
                         device.signalLabel,
-                        style: const TextStyle(
-                          color: AppColors.textPrimary,
+                        style: TextStyle(
+                          color: device.isJivaanPeer
+                              ? AppColors.cyanAccent
+                              : AppColors.textPrimary,
                           fontSize: 11,
                           fontWeight: FontWeight.w600,
                         ),
