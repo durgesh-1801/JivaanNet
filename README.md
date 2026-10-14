@@ -165,4 +165,4 @@ Distributed under the Apache 2.0 License. See [LICENSE](LICENSE) for more inform
 
 ---
 
-### 🌐 Built with resilience by [Durgesh](https://github.com/durgesh-1801) for the community.
+### 🌐 Built with resilience by Team Kasukabe Defence Group for the community.
